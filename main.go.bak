@@ -1,0 +1,53 @@
+package main
+
+import (
+	"encoding/xml"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+)
+
+type Envelope struct {
+	XMLName   xml.Name    `xml:"Envelope"`
+	RateTable []RateTable `xml:"Cube"`
+}
+
+type RateTable struct {
+	Time  string `xml:"time,attr"`
+	Rates []Rates
+}
+
+type Rates struct {
+	Currency string  `xml:"currency,attr"`
+	Rate     float64 `xml:"rate,attr"`
+}
+
+func main() {
+	resp, err := http.Get("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml")
+	if err != nil {
+		fmt.Println("error : ", err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("status error : ", resp.StatusCode)
+	}
+
+	data, _ := ioutil.ReadAll(resp.Body)
+	// fmt.Println("data : ", string(data))
+
+	var envelope Envelope
+	if err = xml.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		fmt.Println("error envelope : ", err)
+	}
+
+	var result Envelope
+	xml.Unmarshal(data, &result)
+
+	// for _, rates := range envelope.RateTable.Rates {
+	// 	fmt.Println("rates : ", rates.Currency, rates.Rate)
+	// }
+	fmt.Println("data ", result)
+	fmt.Println("resp ", xml.NewDecoder(resp.Body).Decode(&envelope))
+}
