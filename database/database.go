@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/rmarasigan/rakuten_travel/models"
 )
 
@@ -23,7 +23,7 @@ func Connect() (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn(""))
 
 	if err != nil {
-		fmt.Printf("Error %s opening database", err)
+		fmt.Printf("Error %s opening database\n", err)
 		return nil, err
 	}
 
@@ -61,7 +61,7 @@ func Connect() (*sql.DB, error) {
 
 	err = db.PingContext(cntxt)
 	if err != nil {
-		fmt.Printf("Error %s pinging database", err)
+		fmt.Printf("Error %s pinging database\n", err)
 		return nil, err
 	}
 	fmt.Printf("Successfully connected to database %s\n", Database)
@@ -79,115 +79,85 @@ func CreateRateTable(db *sql.DB) error {
 
 	result, err := db.ExecContext(cntxt, query)
 	if err != nil {
-		fmt.Printf("Error %s creating rate table", err)
+		fmt.Printf("Error %s creating rate table\n", err)
 		return err
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		fmt.Printf("Error %s getting rows affected", err)
+		fmt.Printf("Error %s getting rows affected\n", err)
 		return err
 	}
 
-	fmt.Printf("Rows affected creating table: %d", rows)
+	fmt.Printf("Rows affected creating table: %d\n", rows)
 	return nil
 }
 
-func InsertRate(db *sql.DB, rates []models.Rates) error {
-	query := "INSERT INTO rates(date, currency, rate) VALUES "
-	var inserts []string
-	var params []interface{}
-
-	for _, v := range rates {
-		inserts = append(inserts, "(?, ?)")
-		for i := range v.Rates {
-			rate := v.Rates[i]
-
-			for j := range rate.Rate {
-				params = append(params, rate.Date, rate.Rate[j].Currency, rate.Rate[j].Rate)
-			}
-		}
-	}
-
-	queryVals := strings.Join(inserts, ",")
-	query = query + queryVals
+func InsertRate(db *sql.DB, dateTime string, rates models.TableRate) error {
+	query := "INSERT INTO rates(date, currency, rate) VALUES(?,?,?)"
 
 	cntxt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	statement, err := db.PrepareContext(cntxt, query)
 	if err != nil {
-		fmt.Printf("Error %s preparing SQL statement", err)
+		fmt.Printf("Error %s preparing SQL statement\n", err)
 		return err
 	}
 	defer statement.Close()
 
-	var date, currency, rate string
-	for _, v := range rates.Rates {
-		date = v.Date
+	var currency, rate string
+	for _, v := range rates.Rate {
+		currency = v.Currency
+		rate = v.Rate
+	}
 
-		for i := range v.Rate {
-			value := v.Rate[i]
-			currency = value.Currency
-			rate = value.Rate
+	var result sql.Result
+	var rows int64
+	if !isDuplicate(db, dateTime, currency, rate) {
+		result, err = statement.ExecContext(cntxt, dateTime, currency, rate)
+		if err != nil {
+			fmt.Printf("Error %s inserting row\n", err)
+			return err
+		}
+
+		rows, err = result.RowsAffected()
+		if err != nil {
+			fmt.Printf("Error %s finding rows affected\n", err)
+			return err
 		}
 	}
+
+	fmt.Printf("%d rate created\n", rows)
+	return nil
+}
+
+func isDuplicate(db *sql.DB, date string, currency string, rate string) bool {
+	query := "SELECT * FROM rates WHERE date = ? AND currency = ? AND rate = ?"
+
+	cntxt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	statement, err := db.PrepareContext(cntxt, query)
+	if err != nil {
+		fmt.Printf("Error %s preparing Select SQL\n", err)
+		return true
+	}
+	defer statement.Close()
+
+	fmt.Println("statement select : ", statement)
 
 	result, err := statement.ExecContext(cntxt, date, currency, rate)
 	if err != nil {
 		fmt.Printf("Error %s inserting row", err)
-		return err
+		return true
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
 		fmt.Printf("Error %s finding rows affected", err)
-		return err
+		return true
 	}
 
-	fmt.Printf("%d rate created", rows)
-	return nil
+	return rows > 1
 }
-
-// func InsertRate(db *sql.DB, rates []models.Rates) error {
-// 	// query := "INSERT INTO rates(date, currency, rate) VALUES(?,?,?)"
-// 	query := "INSERT INTO rates(date, currency, rate) VALUES "
-// 	var inserts []string
-// 	var params []interface{}
-
-// 	cntxt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-// 	defer cancel()
-
-// 	statement, err := db.PrepareContext(cntxt, query)
-// 	if err != nil {
-// 		fmt.Printf("Error %s preparing SQL statement", err)
-// 		return err
-// 	}
-// 	defer statement.Close()
-
-// 	var date, currency, rate string
-// 	for _, v := range rates.Rates {
-// 		date = v.Date
-
-// 		for i := range v.Rate {
-// 			value := v.Rate[i]
-// 			currency = value.Currency
-// 			rate = value.Rate
-// 		}
-// 	}
-
-// 	result, err := statement.ExecContext(cntxt, date, currency, rate)
-// 	if err != nil {
-// 		fmt.Printf("Error %s inserting row", err)
-// 		return err
-// 	}
-
-// 	rows, err := result.RowsAffected()
-// 	if err != nil {
-// 		fmt.Printf("Error %s finding rows affected", err)
-// 		return err
-// 	}
-
-// 	fmt.Printf("%d rate created", rows)
-// 	return nil
-// }
