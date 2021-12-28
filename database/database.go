@@ -42,7 +42,7 @@ func Connect() (*sql.DB, error) {
 		fmt.Printf("Error %s fetching rows\n", err)
 		return nil, err
 	}
-	fmt.Printf("Affected rows: %v\n", rows)
+	fmt.Printf("Connect() Affected rows: %v\n", rows)
 
 	db.Close()
 
@@ -64,7 +64,7 @@ func Connect() (*sql.DB, error) {
 		fmt.Printf("Error %s pinging database\n", err)
 		return nil, err
 	}
-	fmt.Printf("Successfully connected to database %s\n", Database)
+	fmt.Printf("Connect() Successfully connected to database %s\n", Database)
 
 	return db, nil
 }
@@ -89,7 +89,7 @@ func CreateRateTable(db *sql.DB) error {
 		return err
 	}
 
-	fmt.Printf("Rows affected creating table: %d\n", rows)
+	fmt.Printf("Connect() Rows affected creating table: %d\n", rows)
 	return nil
 }
 
