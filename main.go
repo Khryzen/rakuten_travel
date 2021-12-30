@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"github.com/rmarasigan/rakuten_travel/common"
+)
 
 func main() {
 	SystemStartup()
@@ -8,5 +10,5 @@ func main() {
 }
 
 func SystemStartup() {
-	fmt.Printf("Running on http://%v%s/...\n", BindIP, Port)
+	common.Print(common.OK, "Running on http://%v%s/...\n", BindIP, Port)
 }
