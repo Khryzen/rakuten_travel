@@ -7,50 +7,36 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/rmarasigan/rakuten_travel/common"
 	"github.com/rmarasigan/rakuten_travel/models"
 )
 
-// https://golangbot.com/mysql-create-table-insert-row/
-// https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml
-// https://drive.google.com/file/d/1RqdoM-y3mZyIuyph_AGfJiMu9nOAiWzS/view
+// dsn : data source name
+// https://github.com/go-sql-driver/mysql#dsn-data-source-name
 func dsn(database string) string {
-	// dsn = data source name
-	// https://github.com/go-sql-driver/mysql#dsn-data-source-name
 	return fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local", Username, Password, HostName, Port, database)
 }
 
+// Connect : Create rates database if it does not exist. But if it does,
+// it will connect to the database
 func Connect() (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn(""))
-
-	if err != nil {
-		fmt.Printf("Error %s opening database\n", err)
-		return nil, err
-	}
+	common.ErrMsg("Opening database", err)
 
 	cntxt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	result, err := db.ExecContext(cntxt, "CREATE DATABASE IF NOT EXISTS "+Database)
-
-	if err != nil {
-		fmt.Printf("Error %s creating database\n", err)
-		return nil, err
-	}
+	common.ErrMsg("Creating database", err)
 
 	rows, err := result.RowsAffected()
-	if err != nil {
-		fmt.Printf("Error %s fetching rows\n", err)
-		return nil, err
-	}
-	fmt.Printf("Connect() Affected rows: %v\n", rows)
+	common.ErrMsg("Fetching rows", err)
+	common.Print(common.OK, "Affected rows %v", rows)
 
 	db.Close()
 
 	db, err = sql.Open("mysql", dsn(Database))
-	if err != nil {
-		fmt.Printf("Error %s opening database\n", err)
-		return nil, err
-	}
+	common.ErrMsg("Opening database", err)
 
 	db.SetMaxOpenConns(20)
 	db.SetMaxIdleConns(20)
@@ -60,15 +46,13 @@ func Connect() (*sql.DB, error) {
 	defer cancel()
 
 	err = db.PingContext(cntxt)
-	if err != nil {
-		fmt.Printf("Error %s pinging database\n", err)
-		return nil, err
-	}
-	fmt.Printf("Connect() Successfully connected to database %s\n", Database)
+	common.CheckErr("Pinging database", err)
+	common.Print(common.OK, "Successfully connected to %s database", Database)
 
 	return db, nil
 }
 
+// CreateRateTable : Creates rates table if it does not exist
 func CreateRateTable(db *sql.DB) error {
 	query := `CREATE TABLE IF NOT EXISTS
 						rates(id int primary key auto_increment,
@@ -77,22 +61,13 @@ func CreateRateTable(db *sql.DB) error {
 	cntxt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := db.ExecContext(cntxt, query)
-	if err != nil {
-		fmt.Printf("Error %s creating rate table\n", err)
-		return err
-	}
+	_, err := db.ExecContext(cntxt, query)
+	common.CheckErr("Creating rate table", err)
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		fmt.Printf("Error %s getting rows affected\n", err)
-		return err
-	}
-
-	fmt.Printf("Connect() Rows affected creating table: %d\n", rows)
 	return nil
 }
 
+// InsertRate : checks if there's a duplicate before saving historical rates
 func InsertRate(db *sql.DB, dateTime string, rates models.TableRate) error {
 	query := "INSERT INTO rates(date, currency, rate) VALUES(?,?,?)"
 
@@ -100,10 +75,7 @@ func InsertRate(db *sql.DB, dateTime string, rates models.TableRate) error {
 	defer cancel()
 
 	statement, err := db.PrepareContext(cntxt, query)
-	if err != nil {
-		fmt.Printf("Error %s preparing SQL statement\n", err)
-		return err
-	}
+	common.CheckErr("Preparing SQL Statement", err)
 	defer statement.Close()
 
 	var currency, rate string
@@ -112,52 +84,20 @@ func InsertRate(db *sql.DB, dateTime string, rates models.TableRate) error {
 		rate = v.Rate
 	}
 
-	var result sql.Result
-	var rows int64
 	if !isDuplicate(db, dateTime, currency, rate) {
-		result, err = statement.ExecContext(cntxt, dateTime, currency, rate)
-		if err != nil {
-			fmt.Printf("Error %s inserting row\n", err)
-			return err
-		}
-
-		rows, err = result.RowsAffected()
-		if err != nil {
-			fmt.Printf("Error %s finding rows affected\n", err)
-			return err
-		}
+		_, err = statement.ExecContext(cntxt, dateTime, currency, rate)
+		common.CheckErr("Inserting row", err)
 	}
-
-	fmt.Printf("%d rate created\n", rows)
 	return nil
 }
 
+// isDuplicate : Checks if there's a duplicate entry
 func isDuplicate(db *sql.DB, date string, currency string, rate string) bool {
-	query := "SELECT * FROM rates WHERE date = ? AND currency = ? AND rate = ?"
+	var rows int
+	query := "SELECT COUNT(*) FROM rates WHERE date = ? AND currency = ? AND rate = ?"
 
-	cntxt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	err := db.QueryRow(query, date, currency, rate).Scan(&rows)
+	common.CheckErr("Select Count rate", err)
 
-	statement, err := db.PrepareContext(cntxt, query)
-	if err != nil {
-		fmt.Printf("Error %s preparing Select SQL\n", err)
-		return true
-	}
-	defer statement.Close()
-
-	fmt.Println("statement select : ", statement)
-
-	result, err := statement.ExecContext(cntxt, date, currency, rate)
-	if err != nil {
-		fmt.Printf("Error %s inserting row", err)
-		return true
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		fmt.Printf("Error %s finding rows affected", err)
-		return true
-	}
-
-	return rows > 1
+	return rows > 0
 }
