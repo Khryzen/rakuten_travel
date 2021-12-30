@@ -3,20 +3,24 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/rmarasigan/rakuten_travel/common"
 	"github.com/rmarasigan/rakuten_travel/database"
 )
 
-func LatestRate(w http.ResponseWriter, r *http.Request) {
-	now := time.Now().Format("2006-01-02")
+func GetExchangeRate(w http.ResponseWriter, r *http.Request) {
+	var date string
+	url := r.URL.Path
+
+	if url == "latest/" {
+		// date = time.Now().Format("2006-01-02")
+		date = "2021-11-18"
+	} else {
+		date = url
+	}
 	base := SetBase(r.URL.Query().Get("base"))
 
-	now = "2021-11-18"
-	// date := "%" + now + "%"
-	query := fmt.Sprintf("SELECT currency, rate FROM rates WHERE date = '%s' ORDER BY currency ASC", now)
+	query := fmt.Sprintf("SELECT currency, rate FROM rates WHERE date = '%s' ORDER BY currency ASC", date)
 
 	db, err := database.Connect()
 	common.CheckErr("Getting database connection", err)
@@ -53,5 +57,6 @@ func LatestRate(w http.ResponseWriter, r *http.Request) {
 		Base:  base,
 		Rates: tableRate,
 	}
+
 	ReturnJSON(w, r, response)
 }

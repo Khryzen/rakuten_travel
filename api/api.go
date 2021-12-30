@@ -2,22 +2,26 @@ package api
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
-
-	_ "github.com/go-sql-driver/mysql"
 )
 
 func APIHandler(w http.ResponseWriter, r *http.Request) {
 	r.URL.Path = strings.TrimPrefix(r.URL.Path, "/api/rates/")
 	api := strings.TrimSuffix(r.URL.Path, "/")
 
-	if strings.HasPrefix(api, "latest") {
-		LatestRate(w, r)
-	} else if strings.HasPrefix(api, "latest") {
-	} else {
-		GetRate(w, r)
-	}
-}
+	// date format : YYYY-MM-DD
+	pattern := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 
-func GetRate(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(api, "latest") {
+		GetExchangeRate(w, r)
+	} else if strings.HasPrefix(api, "anaylze") {
+		AnalyzeRate(w, r)
+	} else if pattern.MatchString(api) && len(api) < 11 {
+		GetExchangeRate(w, r)
+	} else {
+		ReturnJSON(w, r, map[string]string{
+			"error": "API not found",
+		})
+	}
 }
